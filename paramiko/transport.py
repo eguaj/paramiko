@@ -281,21 +281,29 @@ class Transport (threading.Thread):
         if type(sock) is tuple:
             # connect to the given (host, port)
             hostname, port = sock
-            reason = 'No suitable address family'
-            for (family, socktype, proto, canonname, sockaddr) in socket.getaddrinfo(hostname, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
-                if socktype == socket.SOCK_STREAM:
-                    af = family
-                    addr = sockaddr
-                    sock = socket.socket(af, socket.SOCK_STREAM)
-                    try:
-                        sock.connect((hostname, port))
-                    except socket.error, e:
-                        reason = str(e)
-                    else:
-                        break
-            else:
-                raise SSHException(
-                    'Unable to connect to %s: %s' % (hostname, reason))
+
+            # Iterate over all addresses of hostname, and try to connect
+            sock = None
+            addrList = socket.getaddrinfo(hostname, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            if len(addrList) == 0:
+                raise SSHException("Could not get address for hostname '%s'" % hostname)
+
+            for (family, socktype, proto, canonname, sockaddr) in addrList:
+                if socktype != socket.SOCK_STREAM:
+                    continue
+                af = family
+                addr = sockaddr
+                sock = socket.socket(af, socket.SOCK_STREAM)
+                try:
+                    sock.connect(addr)
+                    break
+                except Exception, e:
+                    sock = None
+
+            # Raise an exception if no connection could be made over all host's addresses
+            if sock == None:
+                raise SSHException("Could not connect to host '%s'" % hostname)
+
         # okay, normal socket-ish flow here...
         threading.Thread.__init__(self)
         self.setDaemon(True)
